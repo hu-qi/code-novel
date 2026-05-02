@@ -4,11 +4,15 @@
   "description": "Transform stories into code, or code into stories",
   "main": "source/index.js",
   "type": "module",
+  "bin": {
+    "code-novel": "./bin/cli.js"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "cli": "node bin/cli.js"
   },
   "keywords": [
     "code",
