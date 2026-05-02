@@ -4,6 +4,7 @@
  * @module ui/app
  */
 
+import Editor from '@monaco-editor/react';
 import { LLMClient } from '../engine/llm-client.js';
 import { StoryParser } from '../story/parser/story-parser.js';
 import { CharacterMapper } from '../story/character/character-mapper.js';
@@ -23,6 +24,10 @@ class CodeNovelApp {
      * @param {AppConfig} config - 配置
      */
     constructor(config) {
+        this.__mode = 'storyToCode';
+        this.__inputValue = '';
+        this.__outputValue = '';
+
         this.__initClient(config);
         this.__initBridge();
         this.__render();
@@ -78,7 +83,7 @@ class CodeNovelApp {
         const app = document.getElementById('app');
 
         app.innerHTML = `
-            <div class="container mx-auto px-4 py-8 max-w-6xl">
+            <div class="container mx-auto px-4 py-8 max-w-7xl">
                 <!-- Header -->
                 <header class="text-center mb-8">
                     <h1 class="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
@@ -104,21 +109,13 @@ class CodeNovelApp {
                     <!-- Input Panel -->
                     <div class="bg-gray-800 rounded-xl p-4">
                         <h2 class="text-lg font-semibold mb-4" id="input-title">📖 输入故事</h2>
-                        <textarea id="input-text"
-                                  class="w-full h-96 bg-gray-900 text-gray-100 rounded-lg p-4 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                  placeholder="输入你的故事...
-
-例如：
-从前有一个勇敢的骑士，他名叫亚瑟。亚瑟有一把神奇的宝剑，可以斩断一切邪恶。他有一个忠实的助手，一只聪明的猫叫米奥。亚瑟的使命是保护王国的和平。"></textarea>
+                        <div id="input-editor" class="h-96 rounded-lg overflow-hidden"></div>
                     </div>
 
                     <!-- Output Panel -->
                     <div class="bg-gray-800 rounded-xl p-4">
                         <h2 class="text-lg font-semibold mb-4">💻 生成的代码</h2>
-                        <div id="output-code"
-                             class="w-full h-96 bg-gray-900 rounded-lg p-4 overflow-auto font-mono text-sm">
-                            <pre class="text-gray-400">// 生成的代码将显示在这里</pre>
-                        </div>
+                        <div id="output-editor" class="h-96 rounded-lg overflow-hidden"></div>
                     </div>
                 </div>
 
@@ -128,14 +125,94 @@ class CodeNovelApp {
                 </div>
 
                 <!-- Generate Button -->
-                <div class="flex justify-center mt-6">
+                <div class="flex justify-center mt-6 gap-4">
                     <button id="btn-generate"
                             class="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-xl font-semibold transition transform hover:scale-105">
                         🚀 生成
                     </button>
+                    <button id="btn-copy"
+                            class="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl font-semibold transition">
+                        📋 复制
+                    </button>
                 </div>
             </div>
         `;
+
+        this.__initEditors();
+    }
+
+    /**
+     * 初始化编辑器
+     *
+     * @private
+     */
+    __initEditors() {
+        // Input Editor
+        this.__inputEditor = Editor.create({
+            value: this.__getInputPlaceholder(),
+            language: 'markdown',
+            theme: 'vs-dark',
+            automaticLayout: true,
+            minimap: { enabled: false },
+            fontSize: 14,
+            lineNumbers: 'off',
+            wordWrap: 'on',
+            scrollBeyondLastLine: false
+        });
+
+        this.__inputEditor.onDidChangeModelContent(() => {
+            this.__inputValue = this.__inputEditor.getValue();
+        });
+
+        document.getElementById('input-editor').appendChild(
+            this.__inputEditor.getDomNode()
+        );
+
+        // Output Editor
+        this.__outputEditor = Editor.create({
+            value: '// 生成的代码将显示在这里',
+            language: 'javascript',
+            theme: 'vs-dark',
+            automaticLayout: true,
+            minimap: { enabled: false },
+            fontSize: 14,
+            readOnly: true,
+            lineNumbers: 'on',
+            scrollBeyondLastLine: false
+        });
+
+        document.getElementById('output-editor').appendChild(
+            this.__outputEditor.getDomNode()
+        );
+    }
+
+    /**
+     * 获取输入占位符
+     *
+     * @private
+     * @return {string}
+     */
+    __getInputPlaceholder() {
+        if (this.__mode === 'storyToCode') {
+            return `输入你的故事...
+
+例如：
+从前有一个勇敢的骑士，他名叫亚瑟。亚瑟有一把神奇的宝剑，可以斩断一切邪恶。他有一个忠实的助手，一只聪明的猫叫米奥。亚瑟的使命是保护王国的和平。`;
+        } else {
+            return `输入你的代码...
+
+例如：
+class Knight {
+    constructor(name) {
+        this.name = name;
+        this.sword = new Sword();
+    }
+
+    attack() {
+        return this.sword.swing();
+    }
+}`;
+        }
     }
 
     /**
@@ -147,17 +224,16 @@ class CodeNovelApp {
         const btnStoryToCode = document.getElementById('btn-story-to-code');
         const btnCodeToStory = document.getElementById('btn-code-to-story');
         const btnGenerate = document.getElementById('btn-generate');
-        const inputText = document.getElementById('input-text');
+        const btnCopy = document.getElementById('btn-copy');
         const inputTitle = document.getElementById('input-title');
-
-        this.__mode = 'storyToCode';
 
         btnStoryToCode.addEventListener('click', () => {
             this.__mode = 'storyToCode';
             btnStoryToCode.className = 'px-6 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition';
             btnCodeToStory.className = 'px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition';
             inputTitle.textContent = '📖 输入故事';
-            inputText.placeholder = '输入你的故事...';
+            this.__inputEditor.updateOptions({ language: 'markdown' });
+            this.__inputEditor.setValue(this.__getInputPlaceholder());
         });
 
         btnCodeToStory.addEventListener('click', () => {
@@ -165,10 +241,12 @@ class CodeNovelApp {
             btnCodeToStory.className = 'px-6 py-2 bg-pink-600 hover:bg-pink-700 rounded-lg transition';
             btnStoryToCode.className = 'px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition';
             inputTitle.textContent = '💻 输入代码';
-            inputText.placeholder = '输入你的代码...\n\n例如：\nclass Knight {\n    constructor(name) {\n        this.name = name;\n        this.sword = new Sword();\n    }\n}';
+            this.__inputEditor.updateOptions({ language: 'javascript' });
+            this.__inputEditor.setValue(this.__getInputPlaceholder());
         });
 
         btnGenerate.addEventListener('click', () => this.__handleGenerate());
+        btnCopy.addEventListener('click', () => this.__handleCopy());
     }
 
     /**
@@ -177,10 +255,9 @@ class CodeNovelApp {
      * @private
      */
     async __handleGenerate() {
-        const inputText = document.getElementById('input-text').value.trim();
-        const outputCode = document.getElementById('output-code');
+        const inputValue = this.__inputEditor.getValue().trim();
 
-        if (!inputText) {
+        if (!inputValue) {
             this.__showStatus('请输入内容', 'error');
             return;
         }
@@ -189,16 +266,34 @@ class CodeNovelApp {
             let result;
 
             if (this.__mode === 'storyToCode') {
-                result = await this.__bridge.storyToCode(inputText);
+                result = await this.__bridge.storyToCode(inputValue);
+                this.__outputEditor.updateOptions({ language: 'javascript' });
             } else {
-                result = await this.__bridge.codeToStory(inputText);
+                result = await this.__bridge.codeToStory(inputValue);
+                this.__outputEditor.updateOptions({ language: 'markdown' });
             }
 
-            outputCode.innerHTML = `<pre class="text-green-400 whitespace-pre-wrap">${this.__escapeHtml(result)}</pre>`;
-            this.__showStatus('生成完成！');
+            this.__outputEditor.setValue(result);
+            this.__showStatus('生成完成！', 'success');
         } catch (error) {
-            outputCode.innerHTML = `<pre class="text-red-400">错误: ${this.__escapeHtml(error.message)}</pre>`;
+            this.__outputEditor.setValue(`// 错误: ${error.message}`);
             this.__showStatus(`生成失败: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * 处理复制
+     *
+     * @private
+     */
+    async __handleCopy() {
+        const outputValue = this.__outputEditor.getValue();
+
+        try {
+            await navigator.clipboard.writeText(outputValue);
+            this.__showStatus('已复制到剪贴板！', 'success');
+        } catch (error) {
+            this.__showStatus('复制失败', 'error');
         }
     }
 
@@ -218,19 +313,6 @@ class CodeNovelApp {
         };
         status.className = `${colors[type] || colors.info} text-center mt-6`;
         status.textContent = message;
-    }
-
-    /**
-     * HTML 转义
-     *
-     * @private
-     * @param {string} text - 文本
-     * @return {string}
-     */
-    __escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     }
 }
 
