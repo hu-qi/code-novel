@@ -7,7 +7,7 @@
 const __llm_config = Symbol('LLM config');
 const __request_id = Symbol('Request ID');
 
-class LLMClient extends EventEmitter {
+class LLMClient {
     /**
      * @param {Object} config - 配置
      * @param {string} config.apiKey - API 密钥
@@ -15,7 +15,7 @@ class LLMClient extends EventEmitter {
      * @param {string} config.model - 模型名称
      */
     constructor(config) {
-        super();
+        this._events = {};
 
         this[__llm_config] = {
             apiKey: config.apiKey,
@@ -141,14 +141,25 @@ ${codeText}
      * @param {Object} keyHandler - 键值处理器
      */
     observe(keyHandler) {
-        const map = this[__llm_config];
         for (let key in keyHandler)
-            (map[key] = map[key] || []).push(keyHandler[key]);
+            this.on(key, keyHandler[key]);
     }
 
     __notify(event, data) {
-        const handlers = this[__llm_config][event] || [];
+        const handlers = this._events[event] || [];
         handlers.forEach(handler => handler(data));
+    }
+
+    on(event, handler) {
+        (this._events[event] = this._events[event] || []).push(handler);
+        return this;
+    }
+
+    off(event, handler) {
+        const handlers = this._events[event] || [];
+        const index = handlers.indexOf(handler);
+        if (index > -1) handlers.splice(index, 1);
+        return this;
     }
 }
 
